@@ -3,3 +3,4 @@ Pillow
 pdf2docx
 docx2pdf
 gunicorn
+requests
