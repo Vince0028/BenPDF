@@ -44,11 +44,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy Python and installed dependencies from the build-env stage
 # This ensures we get the exact Python version and libraries installed previously
+# We no longer explicitly copy /usr/local/bin/gunicorn or /usr/local/bin/pip
+# as python -m gunicorn will find the module within site-packages.
 COPY --from=build-env /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=build-env /usr/local/bin/gunicorn /usr/local/bin/gunicorn
-COPY --from=build-env /usr/local/bin/pip /usr/local/bin/pip
 # Ensure Python 3.11's bin directory is in the PATH.
-# Gunicorn usually ends up in /usr/local/bin from pip install
+# The python3.11 executable itself is typically in /usr/bin/
 ENV PATH="/usr/local/bin:${PATH}"
 
 # Set working directory for the application
