@@ -29,9 +29,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LIBREOFFICE_PATH=/usr/bin/libreoffice
 
 # Install LibreOffice and other necessary system packages
-# - libreoffice: The main LibreOffice suite
-# - fontconfig, libxrender1, libfontconfig1: For font rendering, often required by LibreOffice headless operation
-# - unzip, wget: Common utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     fontconfig \
@@ -39,17 +36,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 \
     unzip \
     wget \
-    # Clean up apt caches to reduce image size
+    # Explicitly install python3.11 and its venv module in the final stage
+    # This ensures python3.11 executable is available in the final image
+    python3.11 \
+    python3.11-venv \
+    # Symlink python3 to python3.11 for broader compatibility
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python and installed dependencies from the build-env stage
-# This ensures we get the exact Python version and libraries installed previously
-# We no longer explicitly copy /usr/local/bin/gunicorn or /usr/local/bin/pip
-# as python -m gunicorn will find the module within site-packages.
-COPY --from=build-env /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-# Ensure Python 3.11's bin directory is in the PATH.
-# The python3.11 executable itself is typically in /usr/bin/
-ENV PATH="/usr/local/bin:${PATH}"
+# Now, copy the Python site-packages from the build stage to the final stage.
+# We'll create a simple virtual environment-like structure in the final image
+# and copy our installed packages into its site-packages.
+RUN python3.11 -m venv /app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
+
+# Copy installed Python packages from build-env to the new venv's site-packages
+COPY --from=build-env /usr/local/lib/python3.11/site-packages /app/.venv/lib/python3.11/site-packages
 
 # Set working directory for the application
 WORKDIR /app
@@ -65,5 +67,6 @@ RUN mkdir -p uploads converted && chmod -R 777 uploads converted
 EXPOSE 10000
 
 # Command to run your Flask application using Gunicorn
-# Using 'python -m gunicorn' is generally more robust as it explicitly uses Python's module runner
+# Using 'python3.11 -m gunicorn' is robust as it explicitly calls Python 3.11
+# and finds the gunicorn module within the site-packages.
 CMD ["python3.11", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
