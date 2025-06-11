@@ -1,3 +1,5 @@
+# app.py
+
 import os
 import io
 import logging
@@ -6,16 +8,16 @@ import glob
 import tempfile
 import secrets
 
-from flask import Flask, request, render_template, send_file, flash, redirect, url_for, jsonify
+from flask import Flask, request, render_template, send_file, flash, redirect, url_for, jsonify # jsonify added
 from PIL import Image
 from pdf2docx import Converter as PdfToDocxConverter
 from docx2pdf import convert as docx_to_pdf_convert
-from werkzeug.utils import secure_filename
-from flask_cors import CORS
-from dotenv import load_dotenv
+from werkzeug.utils import secure_filename # Added this import
+from flask_cors import CORS # Added this import
+from dotenv import load_dotenv # Added this import
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv() # Added this call
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', template_folder='templates')
-CORS(app)
+CORS(app) # Added CORS initialization
 
 # Configuration for upload and converted folders
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -97,7 +99,7 @@ def convert_image_api():
             img = img.convert('RGB')
         elif img.mode == 'P':
             img = img.convert('RGB')
-        
+
         img.save(output_buffer, format='PNG')
         output_buffer.seek(0)
 
@@ -141,14 +143,14 @@ def convert_document_api():
     # Using TemporaryDirectory for robust cleanup
     with tempfile.TemporaryDirectory() as temp_dir:
         input_filepath = os.path.join(temp_dir, secure_filename(filename))
-        
+
         # Save the uploaded file temporarily
         file.save(input_filepath)
         logger.info(f"Saved uploaded file to temporary path: {input_filepath}")
 
         converted_output_filename = ""
         output_filepath = ""
-        mimetype = "" # Define mimetype here
+        mimetype = ""
 
         try:
             if filename.lower().endswith('.pdf'):
@@ -201,5 +203,3 @@ def convert_document_api():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-
