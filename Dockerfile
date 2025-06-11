@@ -1,41 +1,69 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim-buster
+# Stage 1: Build Environment - Install Python dependencies first
+# Using a specific Python base image for better reliability and smaller size
+FROM python:3.11-slim-buster AS build-env
 
-# Set the working directory in the container
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Install build dependencies for Python packages (if any native extensions)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libffi-dev \
+    libssl-dev \
+    # Clean up apt caches to reduce image size
+    && rm -rf /var/lib/apt/lists/*
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy only the requirements file first to leverage Docker caching
+COPY requirements.txt .
 
-# IMPORTANT CONSIDERATION FOR docx2pdf:
-# docx2pdf typically requires LibreOffice or Microsoft Office to be installed
-# This is a major hurdle in a basic Dockerfile.
-# A simple 'pip install docx2pdf' is NOT enough for it to work.
-# If you primarily convert DOCX/DOC, you will likely need to:
-# 1. Use a base image that includes LibreOffice (e.g., 'ubuntu:22.04' and install libreoffice-writer-nogui)
-#    This makes the Docker image much larger.
-# 2. Use a different library that doesn't rely on external software.
-#
-# If you choose to try with LibreOffice:
-# UNCOMMENT THE FOLLOWING LINES IF YOU NEED LIBREOFFICE FOR DOCX2PDF
-# This will significantly increase your image size and build time.
-# Also, change the base image to 'ubuntu:22.04' or similar.
-# FROM ubuntu:22.04
-# RUN apt-get update && apt-get install -y libreoffice-writer-nogui default-jre \
-#     && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install Python dependencies
+# --no-cache-dir to save space, --upgrade pip for good measure (though not strictly necessary for this error)
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Expose the port your Flask app will run on
-# Render typically handles port mapping, but it's good practice to declare
-EXPOSE 8000
+# Stage 2: Production Environment - Install LibreOffice and copy app
+# Use a fresh, clean base image for the final app
+FROM ubuntu:22.04
 
-# Define environment variable for Flask
-# Render will use these and you should also set FLASK_SECRET_KEY in Render dashboard
-ENV FLASK_APP=app.py
+# Set environment variables for non-interactive apt-get and for LibreOffice path
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LIBREOFFICE_PATH=/usr/bin/libreoffice
 
-# Command to run the application using Gunicorn (recommended for production)
-# Install gunicorn: pip install gunicorn
-# Make sure gunicorn is in your requirements.txt
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+# Install LibreOffice and other necessary system packages
+# - libreoffice: The main LibreOffice suite
+# - fontconfig, libxrender1, libfontconfig1: For font rendering, often required by LibreOffice headless operation
+# - unzip, wget: Common utilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice \
+    fontconfig \
+    libxrender1 \
+    libfontconfig1 \
+    unzip \
+    wget \
+    # Clean up apt caches to reduce image size
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python and installed dependencies from the build-env stage
+# This ensures we get the exact Python version and libraries installed previously
+COPY --from=build-env /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=build-env /usr/local/bin/gunicorn /usr/local/bin/gunicorn
+COPY --from=build-env /usr/local/bin/pip /usr/local/bin/pip
+# Ensure Python 3.11's bin directory is in the PATH.
+# Gunicorn usually ends up in /usr/local/bin from pip install
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Set working directory for the application
+WORKDIR /app
+
+# Copy the rest of your application code
+COPY . .
+
+# Create ephemeral directories for uploads and converted files and ensure they are writable
+RUN mkdir -p uploads converted && chmod -R 777 uploads converted
+
+# Expose the port your Flask app (Gunicorn) will listen on
+# Render typically expects port 10000
+EXPOSE 10000
+
+# Command to run your Flask application using Gunicorn
+# Using 'python -m gunicorn' is generally more robust as it explicitly uses Python's module runner
+CMD ["python3.11", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
