@@ -1,157 +1,205 @@
-# app.py
-from flask import Flask, request, send_file, render_template, jsonify
-from werkzeug.utils import secure_filename
 import os
-import uuid # For unique filenames to prevent conflicts
+import io
+import logging
+import zipfile
+import glob
+import tempfile
+import secrets
 
-# Conversion Libraries
-from PIL import Image # For image manipulation
-from pdf2docx import Converter as PdfToDocxConverter # Renamed to avoid conflict
-from docx2pdf import convert as docx_to_pdf_convert # Renamed to avoid conflict
+from flask import Flask, request, render_template, send_file, flash, redirect, url_for, jsonify
+from PIL import Image
+from pdf2docx import Converter as PdfToDocxConverter
+from docx2pdf import convert as docx_to_pdf_convert
+from werkzeug.utils import secure_filename
+from flask_cors import CORS
+from dotenv import load_dotenv
 
-app = Flask(__name__)
+# Load environment variables from .env file
+load_dotenv()
 
-# Define upload and converted file directories
-UPLOAD_FOLDER = 'uploads'
-CONVERTED_FOLDER = 'converted'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['CONVERTED_FOLDER'] = CONVERTED_FOLDER
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Ensure directories exist
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(CONVERTED_FOLDER, exist_ok=True)
+# Initialize Flask app
+app = Flask(__name__, static_folder='static', template_folder='templates')
+CORS(app)
 
-# --- Frontend Route ---
+# Configuration for upload and converted folders
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['CONVERTED_FOLDER'] = 'converted'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+# Set the SECRET_KEY from environment variable, with a development fallback
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
+
+# Ensure upload and converted directories exist if running locally,
+# (These local directories are less critical now as tempfile.TemporaryDirectory will manage isolated spaces)
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+if not os.path.exists(app.config['CONVERTED_FOLDER']):
+    os.makedirs(app.config['CONVERTED_FOLDER'])
+
+# Allowed image extensions for image conversion
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+# Allowed document extensions for document conversion
+ALLOWED_DOCUMENT_EXTENSIONS = {'pdf', 'doc', 'docx'}
+
+def allowed_file(filename, allowed_extensions):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# --- API Endpoints for Conversion ---
-
 @app.route('/api/convert-image', methods=['POST'])
 def convert_image_api():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+    logger.info("Received request for image conversion.")
+    file = None
+    image_url = None
 
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    if 'file' in request.files and request.files['file'].filename != '':
+        file = request.files['file']
+        logger.info(f"File uploaded: {file.filename}")
+        if not allowed_file(file.filename, ALLOWED_IMAGE_EXTENSIONS):
+            logger.warning(f"Invalid image file extension: {file.filename}")
+            return jsonify({'error': 'Invalid image file type. Allowed: PNG, JPG, JPEG, GIF, WEBP'}), 400
+    elif 'url' in request.form and request.form['url'].strip() != '':
+        image_url = request.form['url'].strip()
+        logger.info(f"Image URL provided: {image_url}")
+        # Basic URL validation
+        if not (image_url.startswith('http://') or image_url.startswith('https://')):
+            logger.warning(f"Invalid URL format: {image_url}")
+            return jsonify({'error': 'Invalid URL format. Must start with http:// or https://'}), 400
+    else:
+        logger.warning("No file or URL provided for image conversion.")
+        return jsonify({'error': 'No image file uploaded or URL provided.'}), 400
 
-    if file:
-        # Create a unique filename for the uploaded file
-        original_filename = secure_filename(file.filename)
-        unique_id = str(uuid.uuid4())
-        _, file_extension = os.path.splitext(original_filename)
-        temp_upload_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}{file_extension}")
-        file.save(temp_upload_path)
+    input_path = None
+    output_buffer = io.BytesIO()
+    converted_filename = "converted_image.png"
 
-        try:
-            # Define output filename with a camera-like prefix and JPG format
-            converted_filename = f"camera_photo_{unique_id}.jpg"
-            converted_file_path = os.path.join(app.config['CONVERTED_FOLDER'], converted_filename)
+    try:
+        if file:
+            import requests # Moved import to ensure it's only used if needed
+            img = Image.open(file.stream)
+            logger.info("Image file opened successfully.")
+        elif image_url:
+            logger.info(f"Attempting to fetch image from URL: {image_url}")
+            import requests # Moved import to ensure it's only used if needed
+            response = requests.get(image_url, stream=True)
+            response.raise_for_status()
+            img = Image.open(io.BytesIO(response.content))
+            logger.info("Image fetched from URL successfully.")
 
-            # Open image with Pillow, resize (optional), and save as JPG
-            img = Image.open(temp_upload_path)
-            # You can add more image processing here, e.g., resizing, quality adjustment
-            # img.thumbnail((1200, 1200), Image.Resampling.LANCZOS) # Example: Resize to max 1200px
-            img.save(converted_file_path, "JPEG", quality=90) # Save as JPG with 90% quality
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
+        elif img.mode == 'P':
+            img = img.convert('RGB')
+        
+        img.save(output_buffer, format='PNG')
+        output_buffer.seek(0)
 
-            # Clean up the temporarily uploaded file
-            os.remove(temp_upload_path)
+        logger.info("Image converted to desired format (PNG) in memory.")
 
-            # Send the converted file back to the client
-            return send_file(converted_file_path, as_attachment=True, download_name=converted_filename)
+        response = send_file(
+            output_buffer,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=converted_filename
+        )
+        logger.info(f"Sending converted image: {converted_filename}")
+        return response
 
-        except Exception as e:
-            # Clean up any files created before the error
-            if os.path.exists(temp_upload_path):
-                os.remove(temp_upload_path)
-            if os.path.exists(converted_file_path):
-                os.remove(converted_file_path)
-            app.logger.error(f"Image conversion error: {e}")
-            return jsonify({'error': f'Image conversion failed: {str(e)}'}), 500
-    return jsonify({'error': 'An unexpected error occurred during image processing'}), 500
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching URL: {e}")
+        return jsonify({'error': f"Failed to fetch image from URL: {e}. Please ensure it's a valid, accessible image URL."}), 500
+    except Image.UnidentifiedImageError:
+        logger.error("Uploaded file/URL content is not a recognized image format.")
+        return jsonify({'error': 'Could not identify image file. Please ensure it is a valid image.'}), 400
+    except Exception as e:
+        logger.exception("An unexpected error occurred during image conversion.")
+        return jsonify({'error': f'An unexpected error occurred: {e}'}), 500
+
 
 @app.route('/api/convert-document', methods=['POST'])
 def convert_document_api():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+    logger.info("Received request for document conversion.")
+    if 'file' not in request.files or request.files['file'].filename == '':
+        logger.warning("No document file provided for conversion.")
+        return jsonify({'error': 'No document file uploaded.'}), 400
 
     file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    filename = file.filename
+    logger.info(f"Document file uploaded: {filename}")
 
-    if file:
-        original_filename = secure_filename(file.filename)
-        unique_id = str(uuid.uuid4())
-        base_name, file_extension = os.path.splitext(original_filename)
-        file_extension = file_extension.lower()
+    if not allowed_file(filename, ALLOWED_DOCUMENT_EXTENSIONS):
+        logger.warning(f"Invalid document file extension: {filename}")
+        return jsonify({'error': 'Invalid document file type. Allowed: PDF, DOC, DOCX'}), 400
 
-        temp_upload_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}{file_extension}")
-        file.save(temp_upload_path)
+    # Using TemporaryDirectory for robust cleanup
+    with tempfile.TemporaryDirectory() as temp_dir:
+        input_filepath = os.path.join(temp_dir, secure_filename(filename))
+        
+        # Save the uploaded file temporarily
+        file.save(input_filepath)
+        logger.info(f"Saved uploaded file to temporary path: {input_filepath}")
 
-        converted_filename = ""
-        converted_file_path = ""
+        converted_output_filename = ""
+        output_filepath = ""
+        mimetype = "" # Define mimetype here
 
         try:
-            if file_extension == '.pdf':
-                converted_filename = f"{base_name}.docx"
-                converted_file_path = os.path.join(app.config['CONVERTED_FOLDER'], f"{unique_id}.docx")
-                
-                cv = PdfToDocxConverter(temp_upload_path)
-                cv.convert(converted_file_path)
-                cv.close()
-            elif file_extension in ['.doc', '.docx']:
-                # For .doc files, consider converting to .docx first if docx2pdf doesn't handle them directly.
-                # docx2pdf works best with .docx. If you need .doc, you might need a more complex solution
-                # or tell users to save as .docx first.
-                if file_extension == '.doc':
-                    # This path might need more robust handling for .doc to .docx before PDF conversion
-                    # For simplicity, we'll proceed assuming docx2pdf can handle it or expect .docx
-                    app.logger.warning("Converting .doc file. docx2pdf typically works best with .docx.")
+            if filename.lower().endswith('.pdf'):
+                # Convert PDF to DOCX
+                converted_output_filename = os.path.splitext(filename)[0] + '.docx'
+                output_filepath = os.path.join(temp_dir, converted_output_filename)
+                logger.info(f"Converting PDF to DOCX. Output: {output_filepath}")
+                cv = PdfToDocxConverter(input_filepath)
+                cv.convert(output_filepath, start=0, end=None)
+                cv.close() # Ensure the converter closes its file handles
+                mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                logger.info("PDF to DOCX conversion complete.")
 
-                converted_filename = f"{base_name}.pdf"
-                converted_file_path = os.path.join(app.config['CONVERTED_FOLDER'], f"{unique_id}.pdf")
-                docx_to_pdf_convert(temp_upload_path, converted_file_path)
+            elif filename.lower().endswith(('.doc', '.docx')):
+                # Convert DOC/DOCX to PDF
+                converted_output_filename = os.path.splitext(filename)[0] + '.pdf'
+                output_filepath = os.path.join(temp_dir, converted_output_filename)
+                logger.info(f"Converting DOC/DOCX to PDF. Output: {output_filepath}")
+                # Ensure LibreOffice/MS Office is available on the Render server for docx2pdf
+                # This is a critical dependency that might not be present on Render's default environment.
+                # You might need a custom Docker image or a different approach for docx2pdf.
+                docx_to_pdf_convert(input_filepath, output_filepath)
+                mimetype = 'application/pdf'
+                logger.info("DOCX to PDF conversion complete.")
             else:
-                os.remove(temp_upload_path)
-                return jsonify({'error': 'Unsupported file type. Only PDF, DOC, DOCX are supported.'}), 400
+                logger.warning(f"Unsupported document file type for conversion: {filename}")
+                return jsonify({'error': 'Unsupported document file type.'}), 400
 
-            # Clean up the temporarily uploaded file
-            os.remove(temp_upload_path)
+            # Read the converted file into an in-memory buffer before sending
+            # This releases the file handle on disk, allowing TemporaryDirectory to clean up.
+            with open(output_filepath, 'rb') as f:
+                output_buffer = io.BytesIO(f.read())
+            output_buffer.seek(0) # Rewind the buffer to the beginning
+            logger.info("Converted document read into memory buffer.")
 
-            # Send the converted file back to the client
-            # Use original base_name for cleaner download name
-            return send_file(converted_file_path, as_attachment=True, download_name=converted_filename)
+            # Send the converted file from the in-memory buffer
+            response = send_file(
+                output_buffer, # <--- Sending BytesIO object instead of filepath
+                mimetype=mimetype,
+                as_attachment=True,
+                download_name=converted_output_filename
+            )
+            logger.info(f"Sending converted document: {converted_output_filename}")
+            return response
 
         except Exception as e:
-            # Clean up any files created before the error
-            if os.path.exists(temp_upload_path):
-                os.remove(temp_upload_path)
-            if os.path.exists(converted_file_path):
-                os.remove(converted_file_path)
-            app.logger.error(f"Document conversion error: {e}")
-            # Specific error message for docx2pdf dependency
-            if "soffice" in str(e).lower() or "libreoffice" in str(e).lower() or "word" in str(e).lower():
-                return jsonify({'error': 'Conversion failed. Please ensure LibreOffice (or MS Word on Windows) is installed on the server.'}), 500
-            return jsonify({'error': f'Document conversion failed: {str(e)}'}), 500
-    return jsonify({'error': 'An unexpected error occurred during document processing'}), 500
-
-# Cleanup for converted files after they are sent (optional, can be done by a cron job)
-@app.after_request
-def cleanup_file(response):
-    if "X-Sendfile" in response.headers: # Or check if response is a file download
-        file_path = response.headers.get("X-Sendfile") or response.headers.get("Content-Disposition").split("filename=")[1].strip('"')
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                app.logger.info(f"Cleaned up {file_path}")
-            except Exception as e:
-                app.logger.error(f"Error cleaning up file {file_path}: {e}")
-    return response
+            logger.exception("An error occurred during document conversion.")
+            return jsonify({'error': f'An error occurred during conversion: {e}'}), 500
 
 
 if __name__ == '__main__':
-    # When running locally, ensure 'debug=True' is only for development.
-    # For production, disable debug and use a production-ready WSGI server like Gunicorn or uWSGI.
     app.run(debug=True)
+
+
