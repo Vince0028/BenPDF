@@ -13,14 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Clean up apt caches to reduce image size
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only the requirements file first to leverage Docker caching
+# Copy only the requirements file (this will be used in Stage 2 as well)
 COPY requirements.txt .
 
-# Install Python dependencies
-# --no-cache-dir to save space, --upgrade pip for good measure (though not strictly necessary for this error)
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
+# No need to install pip dependencies in build-env anymore as they will be installed in stage 2
+# RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Stage 2: Production Environment - Install LibreOffice and copy app
+# Stage 2: Production Environment - Install LibreOffice, Python, and then Python dependencies
 # Use a fresh, clean base image for the final app
 FROM ubuntu:22.04
 
@@ -44,17 +43,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Now, copy the Python site-packages from the build stage to the final stage.
-# We'll create a simple virtual environment-like structure in the final image
-# and copy our installed packages into its site-packages.
-RUN python3.11 -m venv /app/.venv
-ENV PATH="/app/.venv/bin:${PATH}"
-
-# Copy installed Python packages from build-env to the new venv's site-packages
-COPY --from=build-env /usr/local/lib/python3.11/site-packages /app/.venv/lib/python3.11/site-packages
-
 # Set working directory for the application
 WORKDIR /app
+
+# Create a virtual environment and activate it
+RUN python3.11 -m venv .venv
+ENV PATH="/app/.venv/bin:${PATH}"
+
+# Copy requirements.txt from the build-env stage to the final stage
+COPY --from=build-env /app/requirements.txt .
+
+# Install Python dependencies into the newly created virtual environment
+# Ensure pip is upgraded within this venv before installing packages
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of your application code
 COPY . .
@@ -68,5 +69,5 @@ EXPOSE 10000
 
 # Command to run your Flask application using Gunicorn
 # Using 'python3.11 -m gunicorn' is robust as it explicitly calls Python 3.11
-# and finds the gunicorn module within the site-packages.
+# and finds the gunicorn module within the site-packages of the active venv.
 CMD ["python3.11", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
