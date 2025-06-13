@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Explicitly install python3.11 and its venv module in the final stage
     python3.11 \
     python3.11-venv \
-    # Link python3 to python3.11 for broader compatibility if needed, though CMD uses python3.11 explicitly
+    # Link python3 to python3.11 for broader compatibility if needed
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     # Clean up apt caches to reduce image size
     && rm -rf /var/lib/apt/lists/*
@@ -36,22 +36,15 @@ WORKDIR /app
 # Create a virtual environment using python3.11
 RUN python3.11 -m venv .venv
 
-# Activate the virtual environment by setting the PATH
+# Activate the virtual environment by adding its bin directory to PATH
 ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy requirements.txt from the build-env stage to the final stage's WORKDIR
 COPY --from=build-env /app/requirements.txt .
 
 # Install Python dependencies into the newly created virtual environment
-# Ensure pip is upgraded within this venv before installing packages
+# The ENV PATH above means 'pip' here will refer to '/app/.venv/bin/pip'
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
-
-# --- Debugging Steps (Optional, but helpful for build logs) ---
-# Check if gunicorn executable exists in the venv's bin directory
-RUN ls -l /app/.venv/bin/gunicorn || echo "gunicorn executable not found where expected"
-# Check if gunicorn module is discoverable by Python
-RUN python3.11 -c "import gunicorn; print('gunicorn module found')" || echo "gunicorn module not found"
-# --- End Debugging Steps ---
 
 # Copy the rest of your application code
 COPY . .
@@ -64,6 +57,5 @@ RUN mkdir -p uploads converted && chmod -R 777 uploads converted
 EXPOSE 10000
 
 # Command to run your Flask application using Gunicorn
-# Using 'python3.11 -m gunicorn' is robust as it explicitly calls Python 3.11
-# and finds the gunicorn module within the site-packages of the active venv.
-CMD ["python3.11", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
+# Explicitly use the Python interpreter from within the virtual environment
+CMD ["/app/.venv/bin/python", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
