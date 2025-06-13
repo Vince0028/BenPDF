@@ -1,525 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Alobin Converter</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary-color: #1a202c; /* Darker Navy Blue */
-            --secondary-color: #4c51bf; /* Royal Blue */
-            --accent-color: #6366f1; /* Lighter Blue for highlights */
-            --bg-color: #f7fafc; /* Off-white background */
-            --card-bg: #ffffff; /* White for cards */
-            --text-color: #2d3748; /* Dark gray for text */
-            --border-color: #e2e8f0;
-            --success-color: #48bb78;
-            --error-color: #ef4444;
-            --info-color: #3b82f6; /* For informational messages */
-        }
-
-        body {
-            margin: 0;
-            font-family: 'Poppins', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.6;
-        }
-
-        header {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 2rem 1rem;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            font-weight: 700;
-        }
-
-        header p {
-            font-size: 1.1rem;
-            font-weight: 300;
-        }
-
-        main {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 2rem 1rem;
-            gap: 2rem;
-        }
-
-        section {
-            background: var(--card-bg);
-            border-radius: 12px;
-            padding: 2rem;
-            width: 100%;
-            max-width: 650px;
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-            border: 1px solid var(--border-color);
-            transition: transform 0.3s ease-in-out;
-        }
-
-        section:hover {
-            transform: translateY(-5px);
-        }
-
-        h2 {
-            color: var(--primary-color);
-            font-size: 1.75rem;
-            margin-top: 0;
-            margin-bottom: 1.5rem;
-            text-align: center;
-            font-weight: 600;
-        }
-
-        .input-group {
-            margin-bottom: 1.5rem;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: var(--text-color);
-        }
-
-        input[type="text"] {
-            width: calc(100% - 20px);
-            padding: 0.85rem 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        input[type="text"]:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-        }
-
-        .file-input-container {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.5rem;
-        }
-
-        input[type="file"] {
-            display: none; /* Hide default file input */
-        }
-
-        .custom-file-upload {
-            display: inline-block;
-            background-color: var(--secondary-color);
-            color: white;
-            padding: 0.75rem 1.25rem;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 1rem;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .custom-file-upload:hover {
-            background-color: var(--accent-color);
-            transform: translateY(-2px);
-        }
-
-        .custom-file-upload:active {
-            transform: translateY(0);
-        }
-
-        .button-group {
-            text-align: center;
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        button {
-            background-color: var(--secondary-color);
-            color: white;
-            padding: 0.85rem 2rem;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1.1rem;
-            font-weight: 600;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        button:hover:not(:disabled) {
-            background-color: var(--accent-color);
-            transform: translateY(-2px);
-        }
-
-        button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        .message {
-            margin-top: 1.5rem;
-            padding: 0.85rem;
-            border-radius: 8px;
-            font-weight: 500;
-            text-align: center;
-            display: none; /* Hidden by default */
-        }
-
-        .message.success {
-            background-color: #d1fae5;
-            color: var(--success-color);
-            border: 1px solid var(--success-color);
-        }
-
-        .message.error {
-            background-color: #fee2e2;
-            color: var(--error-color);
-            border: 1px solid var(--error-color);
-        }
-
-        .message.info {
-            background-color: #dbeafe;
-            color: var(--info-color);
-            border: 1px solid var(--info-color);
-        }
-
-        img.preview {
-            margin-top: 1.5rem;
-            max-width: 100%;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            display: block;
-            height: auto;
-        }
-
-        #imageFileNameDisplay, #documentFileNameDisplay {
-            margin-top: 0.5rem;
-            font-size: 0.95rem;
-            color: #555;
-            word-wrap: break-word;
-            width: 100%;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            header h1 {
-                font-size: 2rem;
-            }
-            header p {
-                font-size: 1rem;
-            }
-            section {
-                padding: 1.5rem;
-                margin: 0.75rem;
-            }
-            h2 {
-                font-size: 1.5rem;
-                margin-bottom: 1rem;
-            }
-            button {
-                padding: 0.75rem 1.5rem;
-                font-size: 1rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            header {
-                padding: 1.5rem 0.75rem;
-            }
-            main {
-                padding: 1.5rem 0.75rem;
-            }
-            section {
-                padding: 1rem;
-            }
-            input[type="text"] {
-                padding: 0.75rem 8px;
-                font-size: 0.9rem;
-            }
-            .custom-file-upload {
-                padding: 0.6rem 1rem;
-                font-size: 0.9rem;
-            }
-            .button-group {
-                flex-direction: column;
-            }
-            .button-group button {
-                width: 100%;
-            }
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal File & Base Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <header>
-        <h1>Alobin Converter</h1>
-        <p>Your Go-To Tool for Seamless URL and Document Conversions</p>
-    </header>
-    <main>
-        <section>
-            <h2>Image to Camera Image (Upload or URL)</h2>
-            <div class="input-group">
-                <label for="imageUpload">Upload Image File (JPG, PNG, GIF):</label>
-                <div class="file-input-container">
-                    <label for="imageUpload" class="custom-file-upload" id="imageUploadLabel">Choose File</label>
-                    <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/gif">
-                    <span id="imageFileNameDisplay">No file chosen</span>
-                </div>
-                 <p style="text-align: center; margin: 1rem 0; font-weight: 600;">OR</p>
-                <label for="screenshotUrl">Paste Image URL:</label>
-                <input type="text" id="screenshotUrl" placeholder="e.g., https://example.com/image.png">
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="message-box" id="messageBox">
+        <p id="messageText"></p>
+        <button onclick="hideMessageBox()">OK</button>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="container">
+        <!-- Image Converter Section -->
+        <div class="section flex flex-col gap-4">
+            <h2 class="text-2xl font-bold text-gray-800 text-center">Image Converter</h2>
+            <div class="file-input-group">
+                <label for="imageFileInput" class="text-gray-700 font-medium">Upload Image (PNG, JPG, GIF, WEBP)</label>
+                <input type="file" id="imageFileInput" accept=".png,.jpg,.jpeg,.gif,.webp" class="input-field file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
             </div>
-            <div class="button-group">
-                <button onclick="convertScreenshotOrImage()" id="convertImageBtn">Convert Image</button>
+            <div class="text-center text-gray-500 my-2">OR</div>
+            <div class="file-input-group">
+                <label for="imageUrlInput" class="text-gray-700 font-medium">Image URL</label>
+                <input type="url" id="imageUrlInput" placeholder="e.g., https://example.com/image.jpg" class="input-field">
             </div>
-            <div id="imageMessage" class="message"></div>
-            <img id="imagePreview" class="preview" alt="Converted Image Preview" style="display: none;">
-        </section>
+            <button onclick="convertImage()" class="btn"><span>Convert Image to PNG</span></button>
+        </div>
 
-        <section>
-            <h2>PDF &harr; Word Converter</h2>
-            <div class="input-group">
-                <label for="documentFile">Upload PDF or Word Document:</label>
-                <div class="file-input-container">
-                    <label for="documentFile" class="custom-file-upload" id="documentUploadLabel">Choose File</label>
-                    <input type="file" id="documentFile" accept=".pdf,.doc,.docx">
-                    <span id="documentFileNameDisplay">No file chosen</span>
-                </div>
+        <!-- Document Converter Section -->
+        <div class="section flex flex-col gap-4">
+            <h2 class="text-2xl font-bold text-gray-800 text-center">Document Converter</h2>
+            <div class="file-input-group">
+                <label for="documentFileInput" class="text-gray-700 font-medium">Upload Document (PDF, DOC, DOCX)</label>
+                <input type="file" id="documentFileInput" accept=".pdf,.doc,.docx" class="input-field file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
             </div>
-            <div class="button-group">
-                <button onclick="convertDocumentFile()" id="convertDocumentBtn">Convert Document</button>
+            <button onclick="convertDocument()" class="btn"><span>Convert Document</span></button>
+        </div>
+
+        <!-- Binary / Base Converter Section -->
+        <div class="section flex flex-col gap-4">
+            <h2 class="text-2xl font-bold text-gray-800 text-center">Base Converter</h2>
+            <div class="base-input-group">
+                <label for="baseInputValue" class="text-gray-700 font-medium">Number to Convert</label>
+                <input type="text" id="baseInputValue" placeholder="Enter number" class="input-field">
             </div>
-            <div id="documentMessage" class="message"></div>
-        </section>
-    </main>
-    <script>
-        // --- Helper Function for Messages ---
-        function showMessage(elementId, text, type) {
-            const messageElement = document.getElementById(elementId);
-            messageElement.textContent = text;
-            messageElement.className = `message ${type}`;
-            messageElement.style.display = 'block';
-            setTimeout(() => {
-                messageElement.style.display = 'none';
-                messageElement.textContent = '';
-                messageElement.className = 'message'; // Reset class
-            }, 7000); // Hide after 7 seconds
-        }
+            <div class="base-input-group">
+                <label for="sourceBaseSelect" class="text-gray-700 font-medium">Source Base</label>
+                <select id="sourceBaseSelect" class="input-field">
+                    <option value="binary">Binary (Base 2)</option>
+                    <option value="decimal" selected>Decimal (Base 10)</option>
+                    <option value="octal">Octal (Base 8)</option>
+                    <option value="hexadecimal">Hexadecimal (Base 16)</option>
+                </select>
+            </div>
+            <div class="base-input-group">
+                <label for="targetBaseSelect" class="text-gray-700 font-medium">Target Base</label>
+                <select id="targetBaseSelect" class="input-field">
+                    <option value="binary">Binary (Base 2)</option>
+                    <option value="decimal">Decimal (Base 10)</option>
+                    <option value="octal">Octal (Base 8)</option>
+                    <option value="hexadecimal" selected>Hexadecimal (Base 16)</option>
+                </select>
+            </div>
+            <button onclick="convertBase()" class="btn"><span>Convert Base</span></button>
+            <div class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                <p class="text-sm font-medium text-gray-600">Converted Result:</p>
+                <p id="baseConversionResult" class="text-lg font-bold text-blue-700 break-words"></p>
+                <p class="text-sm font-medium text-gray-600 mt-4">Solution Steps:</p>
+                <pre id="baseConversionSolution" class="text-sm text-gray-800 whitespace-pre-wrap font-mono"></pre>
+            </div>
+        </div>
+    </div>
 
-        // --- Event Listeners for File Inputs and URL Input ---
-        document.addEventListener('DOMContentLoaded', () => {
-            const imageUploadInput = document.getElementById('imageUpload');
-            const imageFileNameDisplay = document.getElementById('imageFileNameDisplay');
-            const imageUploadLabel = document.getElementById('imageUploadLabel');
-            const screenshotUrlInput = document.getElementById('screenshotUrl');
-
-            imageUploadInput.addEventListener('change', () => {
-                if (imageUploadInput.files.length > 0) {
-                    imageFileNameDisplay.textContent = `Selected: ${imageUploadInput.files[0].name}`;
-                    imageUploadLabel.textContent = 'Change File';
-                    screenshotUrlInput.value = ''; // Clear URL if file is chosen
-                } else {
-                    imageFileNameDisplay.textContent = 'No file chosen';
-                    imageUploadLabel.textContent = 'Choose File';
-                }
-                document.getElementById('imagePreview').style.display = 'none';
-                showMessage('imageMessage', '', ''); // Clear previous messages
-            });
-
-            screenshotUrlInput.addEventListener('input', () => {
-                imageUploadInput.value = ''; // Clear file input if URL is typed
-                imageFileNameDisplay.textContent = 'No file chosen';
-                imageUploadLabel.textContent = 'Choose File';
-                document.getElementById('imagePreview').style.display = 'none';
-                showMessage('imageMessage', '', ''); // Clear previous messages
-            });
-
-
-            const documentFileInput = document.getElementById('documentFile');
-            const documentFileNameDisplay = document.getElementById('documentFileNameDisplay');
-            const documentUploadLabel = document.getElementById('documentUploadLabel');
-
-            documentFileInput.addEventListener('change', () => {
-                if (documentFileInput.files.length > 0) {
-                    documentFileNameDisplay.textContent = `Selected: ${documentFileInput.files[0].name}`;
-                    documentUploadLabel.textContent = 'Change File';
-                } else {
-                    documentFileNameDisplay.textContent = 'No file chosen';
-                    documentUploadLabel.textContent = 'Choose File';
-                }
-                showMessage('documentMessage', '', ''); // Clear previous messages
-            });
-        });
-
-        // --- Conversion Functions (Now communicating with Flask Backend) ---
-
-        async function convertScreenshotOrImage() {
-            const urlInput = document.getElementById('screenshotUrl');
-            const imageUploadInput = document.getElementById('imageUpload');
-            const imgPreview = document.getElementById('imagePreview');
-            const messageId = 'imageMessage';
-
-            let fileToSend = null;
-
-            // Priority: File upload then URL
-            if (imageUploadInput.files.length > 0) {
-                fileToSend = imageUploadInput.files[0];
-            } else if (urlInput.value.trim()) {
-                const imageUrl = urlInput.value.trim();
-                try {
-                    new URL(imageUrl); // Basic validation
-                } catch (e) {
-                    showMessage(messageId, 'Please enter a valid URL.', 'error');
-                    return;
-                }
-                // Fetch the image from the URL to send it as a Blob
-                showMessage(messageId, 'Fetching image from URL...', 'info');
-                try {
-                    const response = await fetch(imageUrl, {mode: 'cors'}); // Add mode: 'cors' for cross-origin images
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const blob = await response.blob();
-                    fileToSend = new File([blob], 'remote_image.jpg', { type: blob.type }); // Create a File object from Blob
-                } catch (error) {
-                    showMessage(messageId, `Failed to fetch image from URL: ${error.message}. Please ensure CORS policy allows access.`, 'error');
-                    return;
-                }
-            } else {
-                showMessage(messageId, 'Please upload an image file OR paste an image URL.', 'error');
-                return;
-            }
-
-            // Show loading message
-            showMessage(messageId, 'Converting image...', 'info');
-            imgPreview.style.display = 'none'; // Hide preview during conversion
-
-            const formData = new FormData();
-            formData.append('file', fileToSend);
-
-            try {
-                const response = await fetch('/api/convert-image', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    // Create a temporary URL for the downloaded file
-                    const downloadUrl = URL.createObjectURL(blob);
-                    const contentDisposition = response.headers.get('Content-Disposition');
-                    let filename = 'converted_image.jpg';
-                    if (contentDisposition && contentDisposition.includes('filename=')) {
-                        filename = contentDisposition.split('filename=')[1].trim().replace(/"/g, '');
-                    }
-
-                    // Display preview for the new Blob (if it's an image)
-                    if (blob.type.startsWith('image/')) {
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            imgPreview.src = e.target.result;
-                            imgPreview.style.display = 'block';
-                        };
-                        reader.readAsDataURL(blob);
-                    } else {
-                        imgPreview.style.display = 'none';
-                    }
-
-                    // Trigger the download
-                    const a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(downloadUrl); // Clean up the Blob URL
-
-                    showMessage(messageId, `Image converted and downloaded as "${filename}".`, 'success');
-                    // Clear inputs
-                    urlInput.value = '';
-                    imageUploadInput.value = '';
-                    document.getElementById('imageFileNameDisplay').textContent = 'No file chosen';
-                    document.getElementById('imageUploadLabel').textContent = 'Choose File';
-
-                } else {
-                    const errorData = await response.json();
-                    showMessage(messageId, `Conversion failed: ${errorData.error || response.statusText}`, 'error');
-                }
-            } catch (error) {
-                showMessage(messageId, `An error occurred: ${error.message}`, 'error');
-                console.error('Fetch error:', error);
-            }
-        }
-
-        async function convertDocumentFile() {
-            const documentFileInput = document.getElementById('documentFile');
-            const messageId = 'documentMessage';
-
-            if (documentFileInput.files.length === 0) {
-                showMessage(messageId, 'Please upload a document file.', 'error');
-                return;
-            }
-
-            const fileToConvert = documentFileInput.files[0];
-            showMessage(messageId, 'Converting document...', 'info');
-
-            const formData = new FormData();
-            formData.append('file', fileToConvert);
-
-            try {
-                const response = await fetch('/api/convert-document', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const downloadUrl = URL.createObjectURL(blob);
-                    const contentDisposition = response.headers.get('Content-Disposition');
-                    let filename = 'converted_document.pdf'; // Default
-                    if (contentDisposition && contentDisposition.includes('filename=')) {
-                        filename = contentDisposition.split('filename=')[1].trim().replace(/"/g, '');
-                    }
-
-                    const a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(downloadUrl); // Clean up the Blob URL
-
-                    showMessage(messageId, `Document converted and downloaded as "${filename}".`, 'success');
-                    // Clear inputs
-                    documentFileInput.value = '';
-                    document.getElementById('documentFileNameDisplay').textContent = 'No file chosen';
-                    document.getElementById('documentUploadLabel').textContent = 'Choose File';
-
-                } else {
-                    const errorData = await response.json();
-                    showMessage(messageId, `Conversion failed: ${errorData.error || response.statusText}`, 'error');
-                }
-            } catch (error) {
-                showMessage(messageId, `An error occurred: ${error.message}`, 'error');
-                console.error('Fetch error:', error);
-            }
-        }
-    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
