@@ -68,4 +68,4 @@ EXPOSE 10000
 
 # Command to run your Flask application using Gunicorn
 # Explicitly use the Python interpreter from within the virtual environment
-CMD ["/app/.venv/bin/python", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
