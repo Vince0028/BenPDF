@@ -1,36 +1,107 @@
-function showMessageBox(message) {
-    document.getElementById('messageText').innerText = message;
-    document.getElementById('messageBox').style.display = 'block';
+// --- Helper Function for Messages ---
+function showMessage(elementId, text, type) {
+    const messageElement = document.getElementById(elementId);
+    messageElement.textContent = text;
+    messageElement.className = `message ${type}`;
+    messageElement.style.display = 'block';
+    setTimeout(() => {
+        messageElement.style.display = 'none';
+        messageElement.textContent = '';
+        messageElement.className = 'message'; // Reset class
+    }, 7000); // Hide after 7 seconds
 }
 
-function hideMessageBox() {
-    document.getElementById('messageBox').style.display = 'none';
-}
+// --- Event Listeners for File Inputs and URL Input ---
+document.addEventListener('DOMContentLoaded', () => {
+    const imageUploadInput = document.getElementById('imageUpload');
+    const imageFileNameDisplay = document.getElementById('imageFileNameDisplay');
+    const imageUploadLabel = document.getElementById('imageUploadLabel');
+    const screenshotUrlInput = document.getElementById('screenshotUrl');
 
-function showLoading() {
-    document.getElementById('loadingOverlay').style.display = 'flex';
-}
+    imageUploadInput.addEventListener('change', () => {
+        if (imageUploadInput.files.length > 0) {
+            imageFileNameDisplay.textContent = `Selected: ${imageUploadInput.files[0].name}`;
+            imageUploadLabel.textContent = 'Change File';
+            screenshotUrlInput.value = ''; // Clear URL if file is chosen
+        } else {
+            imageFileNameDisplay.textContent = 'No file chosen';
+            imageUploadLabel.textContent = 'Choose File';
+        }
+        document.getElementById('imagePreview').style.display = 'none';
+        showMessage('imageMessage', '', ''); // Clear previous messages
+    });
 
-function hideLoading() {
-    document.getElementById('loadingOverlay').style.display = 'none';
-}
+    screenshotUrlInput.addEventListener('input', () => {
+        imageUploadInput.value = ''; // Clear file input if URL is typed
+        imageFileNameDisplay.textContent = 'No file chosen';
+        imageUploadLabel.textContent = 'Choose File';
+        document.getElementById('imagePreview').style.display = 'none';
+        showMessage('imageMessage', '', ''); // Clear previous messages
+    });
 
-// Function to handle Image Conversion (from file upload or URL)
-async function convertImage() {
-    const imageFileInput = document.getElementById('imageFileInput');
-    const imageUrlInput = document.getElementById('imageUrlInput');
-    const formData = new FormData();
 
-    if (imageFileInput.files.length > 0) {
-        formData.append('file', imageFileInput.files[0]);
-    } else if (imageUrlInput.value.trim() !== '') {
-        formData.append('url', imageUrlInput.value.trim());
+    const documentFileInput = document.getElementById('documentFile');
+    const documentFileNameDisplay = document.getElementById('documentFileNameDisplay');
+    const documentUploadLabel = document.getElementById('documentUploadLabel');
+
+    documentFileInput.addEventListener('change', () => {
+        if (documentFileInput.files.length > 0) {
+            documentFileNameDisplay.textContent = `Selected: ${documentFileInput.files[0].name}`;
+            documentUploadLabel.textContent = 'Change File';
+        } else {
+            documentFileNameDisplay.textContent = 'No file chosen';
+            documentUploadLabel.textContent = 'Choose File';
+        }
+        showMessage('documentMessage', '', ''); // Clear previous messages
+    });
+});
+
+// --- Conversion Functions (Now communicating with Flask Backend) ---
+
+async function convertScreenshotOrImage() {
+    const urlInput = document.getElementById('screenshotUrl');
+    const imageUploadInput = document.getElementById('imageUpload');
+    const imgPreview = document.getElementById('imagePreview');
+    const messageId = 'imageMessage';
+
+    let fileToSend = null;
+
+    // Priority: File upload then URL
+    if (imageUploadInput.files.length > 0) {
+        fileToSend = imageUploadInput.files[0];
+    } else if (urlInput.value.trim()) {
+        const imageUrl = urlInput.value.trim();
+        try {
+            new URL(imageUrl); // Basic validation
+        } catch (e) {
+            showMessage(messageId, 'Please enter a valid URL.', 'error');
+            return;
+        }
+        // Fetch the image from the URL to send it as a Blob
+        showMessage(messageId, 'Fetching image from URL...', 'info');
+        try {
+            // Ensure CORS is handled on the server serving the image if it's cross-origin
+            const response = await fetch(imageUrl, {mode: 'cors'});
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const blob = await response.blob();
+            // Create a File object from Blob, Flask expects a File-like object
+            fileToSend = new File([blob], 'remote_image.jpg', { type: blob.type });
+        } catch (error) {
+            showMessage(messageId, `Failed to fetch image from URL: ${error.message}. Please ensure the URL is correct and the image server allows CORS.`, 'error');
+            return;
+        }
     } else {
-        showMessageBox('Please upload an image file or provide an image URL.');
+        showMessage(messageId, 'Please upload an image file OR paste an image URL.', 'error');
         return;
     }
 
-    showLoading();
+    // Show loading message
+    showMessage(messageId, 'Converting image...', 'info');
+    imgPreview.style.display = 'none'; // Hide preview during conversion
+
+    const formData = new FormData();
+    formData.append('file', fileToSend); // Key 'file' must match what Flask expects
+
     try {
         const response = await fetch('/api/convert-image', {
             method: 'POST',
@@ -38,47 +109,70 @@ async function convertImage() {
         });
 
         if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            // Extract filename from Content-Disposition header, or use a default
+            const blob = await response.blob(); // Get the response as a Blob
+            const downloadUrl = URL.createObjectURL(blob); // Create a temporary URL for the Blob
+
+            // Extract filename from Content-Disposition header
             const contentDisposition = response.headers.get('Content-Disposition');
-            a.download = contentDisposition ? contentDisposition.split('filename=')[1].trim().replace(/"/g, '') : 'converted_image.png';
-            
+            let filename = 'converted_image.jpg'; // Default if header is missing
+            if (contentDisposition && contentDisposition.includes('filename=')) {
+                filename = contentDisposition.split('filename=')[1].trim().replace(/"/g, '');
+            }
+
+            // Display preview for the new Blob (if it's an image)
+            if (blob.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imgPreview.src = e.target.result;
+                    imgPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(blob);
+            } else {
+                imgPreview.style.display = 'none';
+            }
+
+            // Trigger the download
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename; // Set the download filename
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            showMessageBox('Image converted and download initiated!');
+            URL.revokeObjectURL(downloadUrl); // Clean up the Blob URL
+
+            showMessage(messageId, `Image converted and downloaded as "${filename}".`, 'success');
+            // Clear inputs
+            urlInput.value = '';
+            imageUploadInput.value = '';
+            document.getElementById('imageFileNameDisplay').textContent = 'No file chosen';
+            document.getElementById('imageUploadLabel').textContent = 'Choose File';
+
         } else {
+            // If response is not OK, try to parse JSON error message
             const errorData = await response.json();
-            showMessageBox(`Error: ${errorData.error || response.statusText}`);
+            showMessage(messageId, `Conversion failed: ${errorData.error || response.statusText}`, 'error');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showMessageBox('An unexpected error occurred during image conversion.');
-    } finally {
-        hideLoading();
-        // Clear input fields
-        imageFileInput.value = '';
-        imageUrlInput.value = '';
+        showMessage(messageId, `An error occurred: ${error.message}`, 'error');
+        console.error('Fetch error:', error);
     }
 }
 
-// Function to handle Document Conversion (PDF <-> DOCX)
-async function convertDocument() {
-    const documentFileInput = document.getElementById('documentFileInput');
+async function convertDocumentFile() {
+    const documentFileInput = document.getElementById('documentFile');
+    const messageId = 'documentMessage';
+
     if (documentFileInput.files.length === 0) {
-        showMessageBox('Please upload a document file (PDF, DOC, DOCX).');
+        showMessage(messageId, 'Please upload a document file.', 'error');
         return;
     }
 
-    const formData = new FormData();
-    formData.append('file', documentFileInput.files[0]);
+    const fileToConvert = documentFileInput.files[0];
+    showMessage(messageId, 'Converting document...', 'info');
 
-    showLoading();
+    const formData = new FormData();
+    formData.append('file', fileToConvert); // Key 'file' must match what Flask expects
+
     try {
         const response = await fetch('/api/convert-document', {
             method: 'POST',
@@ -86,83 +180,38 @@ async function convertDocument() {
         });
 
         if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            // Extract filename from Content-Disposition header, or use a default
+            const blob = await response.blob(); // Get the response as a Blob
+            const downloadUrl = URL.createObjectURL(blob); // Create a temporary URL for the Blob
+
+            // Extract filename from Content-Disposition header
             const contentDisposition = response.headers.get('Content-Disposition');
-            a.download = contentDisposition ? contentDisposition.split('filename=')[1].trim().replace(/"/g, '') : 'converted_document.pdf';
-            
+            let filename = 'converted_document.pdf'; // Default if header is missing
+            if (contentDisposition && contentDisposition.includes('filename=')) {
+                filename = contentDisposition.split('filename=')[1].trim().replace(/"/g, '');
+            }
+
+            // Trigger the download
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename; // Set the download filename
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            showMessageBox('Document converted and download initiated!');
+            URL.revokeObjectURL(downloadUrl); // Clean up the Blob URL
+
+            showMessage(messageId, `Document converted and downloaded as "${filename}".`, 'success');
+            // Clear inputs
+            documentFileInput.value = '';
+            document.getElementById('documentFileNameDisplay').textContent = 'No file chosen';
+            document.getElementById('documentUploadLabel').textContent = 'Choose File';
+
         } else {
+            // If response is not OK, try to parse JSON error message
             const errorData = await response.json();
-            showMessageBox(`Error: ${errorData.error || response.statusText}`);
+            showMessage(messageId, `Conversion failed: ${errorData.error || response.statusText}`, 'error');
         }
     } catch (error) {
-        console.error('Error:', error);
-        showMessageBox('An unexpected error occurred during document conversion.');
-    } finally {
-        hideLoading();
-        documentFileInput.value = ''; // Clear input field
-    }
-}
-
-// Function to handle Base Conversion (Binary, Decimal, Octal, Hexadecimal)
-async function convertBase() {
-    const inputValue = document.getElementById('baseInputValue').value.trim();
-    const sourceBase = document.getElementById('sourceBaseSelect').value;
-    const targetBase = document.getElementById('targetBaseSelect').value;
-    const resultDisplay = document.getElementById('baseConversionResult');
-    const solutionDisplay = document.getElementById('baseConversionSolution');
-
-    resultDisplay.innerText = ''; // Clear previous results
-    solutionDisplay.innerText = ''; // Clear previous solution
-
-    if (!inputValue) {
-        showMessageBox('Please enter a number to convert.');
-        return;
-    }
-
-    showLoading();
-    try {
-        const response = await fetch('/api/convert-base', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                inputValue: inputValue,
-                sourceBase: sourceBase,
-                targetBase: targetBase
-            }),
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.result) {
-                resultDisplay.innerText = data.result;
-                solutionDisplay.innerText = data.solution;
-                showMessageBox('Base conversion successful!');
-            } else {
-                resultDisplay.innerText = 'Error: No result.';
-                showMessageBox('Error: No result from conversion.');
-            }
-        } else {
-            const errorData = await response.json();
-            resultDisplay.innerText = `Error: ${errorData.error || response.statusText}`;
-            showMessageBox(`Error: ${errorData.error || response.statusText}`);
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        resultDisplay.innerText = 'An unexpected error occurred.';
-        showMessageBox('An unexpected error occurred during base conversion.');
-    } finally {
-        hideLoading();
+        showMessage(messageId, `An error occurred: ${error.message}`, 'error');
+        console.error('Fetch error:', error);
     }
 }
