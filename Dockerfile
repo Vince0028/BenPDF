@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 \
     unzip \
     wget \
+    # Explicitly install unoconv here
+    unoconv \
     # Explicitly install python3.11 and its venv module in the final stage
     python3.11 \
     python3.11-venv \
